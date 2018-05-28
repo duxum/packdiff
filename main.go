@@ -47,6 +47,10 @@ func main() {
 	}
 
 	p1Directory, p2Directory, err := getTempDir(thePkgPath, tag1, tag2) //Directories for the two package to analyze
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
 	//Delete of created directories
 	//If the first tag is empty(current), only one temporary directory is created and is to be deleted
@@ -60,11 +64,6 @@ func main() {
 	} else {
 		defer os.RemoveAll(filepath.Dir(toDelete1))
 		defer os.RemoveAll(filepath.Dir(toDelete2))
-	}
-
-	if err != nil {
-		log.Print(err)
-		return
 	}
 
 	p1, err := getPackage(p1Directory)
@@ -87,7 +86,7 @@ type fileOperationResult struct {
 }
 
 //getTempDir returns paths to directories of packages to be diff
-//Temp directories are not deleted
+//Temp directories are deleted in case of an error
 func getTempDir(pkgPath, tag1, tag2 string) (string, string, error) {
 
 	isGit := isDirectoryGit(pkgPath)
@@ -117,14 +116,18 @@ func getTempDir(pkgPath, tag1, tag2 string) (string, string, error) {
 
 		select {
 		case d1CopyResult = <-p1Chan:
-			if d1CopyResult.err != nil {
-				return d1CopyResult.path, d2CopyResult.path, d1CopyResult.err
-			}
 		case d2CopyResult = <-p2Chan:
-			if d2CopyResult.err != nil {
-				return d1CopyResult.path, d2CopyResult.path, d2CopyResult.err
-			}
 		}
+	}
+	// Delete of temporary folders in case of an error
+	if d1CopyResult.err != nil || d2CopyResult.err != nil {
+		os.RemoveAll(d1CopyResult.path)
+		os.RemoveAll(d2CopyResult.path)
+		err := d1CopyResult.err
+		if err == nil {
+			err = d2CopyResult.err
+		}
+		return "", "", err
 	}
 
 	return d1CopyResult.path, d2CopyResult.path, nil
